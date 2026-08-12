@@ -1,0 +1,54 @@
+.App {
+  font-family: Arial, sans-serif;
+  padding: 10px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.job-form {
+  display: flex;
+  gap: 0px;
+  margin-bottom: 10px;
+}
+
+.job-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #f9f9f9;
+}
+
+ul {
+  list-style: none;
+  align-items: center;
+  padding: 0;
+}
+
+button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 6px;
+  background-color: #4a90d9;
+  color: white;
+  cursor: pointer;
+}
+
+button:hover {
+  background-color: #3a7bc0;
+}
+
+select {
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+input{
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
