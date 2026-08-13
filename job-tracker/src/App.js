@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './App.css';
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
 
 
 function App() {
@@ -86,39 +87,47 @@ function App() {
 
   return (
     <div className="App">
-      <h1>Job Applications: {applications.length}</h1>
+      <SignedOut>
+        <h1>Job Applications</h1>
+        <p>Sign in to track your applications</p>
+        <SignInButton />
+      </SignedOut>
 
-      <form onSubmit={handleSubmit} className="job-form">
-        <input
-          type="text"
-          placeholder="Company"
-          value={company}
-          onChange={(e) => setCompany(e.target.value)}
-        />
-        <input
-          type="text"
-          placeholder="Role"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-        />
-        <button type="submit">Add</button>
-      </form>
-      <ul>
-        {applications.map((app) => (
-          <li key={app.id} className="job-item">
-          {app.role} at {app.company} - {app.status}
-          <button onClick={() => handleDelete(app.id)}>Delete</button>
-          <select 
-            value={app.status}
-            onChange={(e) => handleStatusChange(app.id, e.target.value)}>
-              <option value="Applied">Applied</option>
-              <option value="Interviewing">Interviewing</option>
-              <option value="Offered">Offered</option>
-              <option value="Rejected">Rejected</option>
-          </select>
-          </li>
-        ))}
-        </ul>
+      <SignedIn>
+        <UserButton />
+        <h1>Job Applications: {applications.length}</h1>
+        <form onSubmit={handleSubmit} className="job-form">
+          <input
+            type="text"
+            placeholder="Company"
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder="Role"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+          />
+          <button type="submit">Add</button>
+        </form>
+        <ul>
+          {applications.map((app) => (
+            <li key={app.id} className="job-item">
+            {app.role} at {app.company} - {app.status}
+            <button onClick={() => handleDelete(app.id)}>Delete</button>
+            <select 
+              value={app.status}
+              onChange={(e) => handleStatusChange(app.id, e.target.value)}>
+                <option value="Applied">Applied</option>
+                <option value="Interviewing">Interviewing</option>
+                <option value="Offered">Offered</option>
+                <option value="Rejected">Rejected</option>
+            </select>
+            </li>
+          ))}
+          </ul>
+        </SignedIn>
     </div>
   );
 }
