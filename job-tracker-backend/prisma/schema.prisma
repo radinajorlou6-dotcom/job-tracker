@@ -7,10 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Listing {
+  id     Int    @id @default(autoincrement())
+  source String?
+  category String?
+  companyName String?
+  sourceId String @unique
+  title String?
+  active Boolean?
+  terms String[]
+  dateUpdated DateTime?
+  datePosted DateTime?
+  url String?
+  locations String[]
+  companyUrl String?
+  isVisible Boolean @default(true)
+  sponsorship String?
+  degrees String[]
+}
+
 model Application {
   id      Int    @id @default(autoincrement())
   company String
   role    String
   status  String @default("Applied")
   userId String
+  sourceId String?
+  category String?
+  terms String[]
+  dateApplied DateTime? @default(now())
+  datePosted DateTime?
+  url String?
+  locations String[]
+  companyUrl String?
+  sponsorship String?
+  degrees String[]
+  salary String?
 }
