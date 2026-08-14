@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react';
 import './App.css';
-import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignInButton, UserButton, useAuth } from '@clerk/clerk-react';
 
 
 function App() {
   const [applications, setApplications] = useState([]);
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
+  const { getToken, isLoaded, isSignedIn } = useAuth();
 
   useEffect(() => {
-    loadApplications();
-  }, [])
+    if (isLoaded && isSignedIn) {
+      loadApplications();
+    }
+  }, [isLoaded, isSignedIn]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -20,9 +23,10 @@ function App() {
       role: role,
     };
     try{
+      const token = await getToken();
       const response = await fetch(`${process.env.REACT_APP_API_URL}/applications`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
         body: JSON.stringify(newApp),
       });
       if (!response.ok) throw new Error("Failed to post applications");
@@ -38,8 +42,10 @@ function App() {
 
   async function handleDelete(idToRemove){
     try {
+      const token = await getToken();
       const response = await fetch(`${process.env.REACT_APP_API_URL}/applications/${idToRemove}`, {
         method: 'DELETE',
+        headers: {'Authorization': `Bearer ${token}`},
       });
       if (!response.ok) throw new Error("Could not delete application");
       setApplications(applications.filter((app) => app.id !== idToRemove));
@@ -51,9 +57,10 @@ function App() {
 
   async function handleStatusChange(idToChange, newStatus) {
     try {
+      const token = await getToken();
       const response = await fetch(`${process.env.REACT_APP_API_URL}/applications/${idToChange}`, {
         method: 'PATCH',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
         body: JSON.stringify({newStatus: newStatus}),
       });
       if (!response.ok) throw new Error("Could not change status");
@@ -73,11 +80,14 @@ function App() {
 
   async function loadApplications() {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/applications`);
+      const token = await getToken();
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/applications`, {
+        headers: {'Authorization': `Bearer ${token}`},
+      });
       if (!response.ok) {
         throw new Error('Failed to load applications');
       }
-      const data = await response.json(0);
+      const data = await response.json();
       setApplications(data);
     } catch(error) {
       console.error(error);

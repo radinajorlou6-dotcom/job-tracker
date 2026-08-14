@@ -12,4 +12,5 @@ model Application {
   company String
   role    String
   status  String @default("Applied")
+  userId String
 }
