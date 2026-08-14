@@ -10,8 +10,7 @@ function App() {
   const { getToken, isLoaded, isSignedIn } = useAuth();
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      async function loadApplications() {
+    async function loadApplications() {
         try {
           const token = await getToken();
           const response = await fetch(`${process.env.REACT_APP_API_URL}/applications`, {
@@ -27,6 +26,8 @@ function App() {
           alert('Could not load applications. Please try again');
         }
       }
+    if (isLoaded && isSignedIn) {
+      loadApplications();
     }
   }, [isLoaded, isSignedIn]);
 
