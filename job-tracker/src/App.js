@@ -29,7 +29,7 @@ function App() {
     if (isLoaded && isSignedIn) {
       loadApplications();
     }
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, getToken]);
 
   async function handleSubmit(e) {
     e.preventDefault();
