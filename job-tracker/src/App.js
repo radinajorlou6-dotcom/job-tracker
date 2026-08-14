@@ -11,7 +11,20 @@ function App() {
 
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      loadApplications();
+      try {
+        const token = await getToken();
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/applications`, {
+          headers: {'Authorization': `Bearer ${token}`},
+        });
+        if (!response.ok) {
+          throw new Error('Failed to load applications');
+        }
+        const data = await response.json();
+        setApplications(data);
+      } catch(error) {
+        console.error(error);
+        alert('Could not load applications. Please try again');
+      }
     }
   }, [isLoaded, isSignedIn]);
 
@@ -78,23 +91,7 @@ function App() {
     }
   }
 
-  async function loadApplications() {
-    try {
-      const token = await getToken();
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/applications`, {
-        headers: {'Authorization': `Bearer ${token}`},
-      });
-      if (!response.ok) {
-        throw new Error('Failed to load applications');
-      }
-      const data = await response.json();
-      setApplications(data);
-    } catch(error) {
-      console.error(error);
-      alert('Could not load applications. Please try again');
-    }
-  }
-
+  
   return (
     <div className="App">
       <SignedOut>
