@@ -7,12 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// A job posting imported from an external feed. Rows are shared across all
+// users; per-user opinions about a listing live in ListingMatch/Application.
 model Listing {
   id     Int    @id @default(autoincrement())
+  feed   String @default("summer2027")
   source String?
   category String?
   company String?
-  sourceId String @unique
+  sourceId String
   role String?
   active Boolean?
   terms String[]
@@ -24,16 +27,37 @@ model Listing {
   isVisible Boolean @default(true)
   sponsorship String?
   degrees String[]
+
+  // Change detection: contentHash covers only the fields a user would care
+  // about, so re-imports that touch nothing don't look like edits.
+  contentHash String?
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  lastChangedAt DateTime?
+
+  applications Application[]
+  matches      ListingMatch[]
+
+  @@unique([feed, sourceId])
+  @@index([datePosted])
+  @@index([active, isVisible])
+  @@index([company])
 }
 
 model Application {
   id      Int    @id @default(autoincrement())
-  source  String?
-  company String?
-  sourceId String?
-  role    String?
-  status  String @default("Applied")
   userId String
+  status  String @default("Applied")
+
+  // Set when the application came from the feed via one-click apply.
+  listingId Int?
+  listing   Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  // Same shape as Listing so hand-added and imported entries look identical.
+  source  String?
+  sourceId String?
+  company String?
+  role    String?
   category String?
   terms String[]
   dateApplied DateTime? @default(now())
@@ -44,4 +68,76 @@ model Application {
   sponsorship String?
   degrees String[]
   salary String?
+  notes String?
+
+  // The listing exactly as it looked when applied. The record stays immutable
+  // unless the user explicitly pulls an upstream update in.
+  snapshot      Json?
+  snapshotHash  String?
+  dismissedHash String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  events ApplicationEvent[]
+
+  @@unique([userId, listingId])
+  @@index([userId, status])
+  @@index([userId, dateApplied])
+}
+
+// Status history, which is what makes response-rate and time-to-response
+// analytics possible rather than guessed.
+model ApplicationEvent {
+  id            Int      @id @default(autoincrement())
+  applicationId Int
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  userId        String
+  type          String
+  fromStatus    String?
+  toStatus      String?
+  detail        String?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([applicationId])
+}
+
+model UserPreferences {
+  userId             String   @id
+  headline           String?
+  desiredRoles       String[]
+  preferredLocations String[]
+  remotePreference   String   @default("any")
+  terms              String[]
+  degrees            String[]
+  categories         String[]
+  needsSponsorship   Boolean  @default(false)
+  excludedCompanies  String[]
+  mustHaves          String?
+  dealBreakers       String?
+  values             String?
+  updatedAt          DateTime @default(now()) @updatedAt
+  createdAt          DateTime @default(now())
+}
+
+// One AI (or heuristic) score per user per listing. prefsHash lets us detect
+// that preferences changed and the score is stale without deleting anything.
+model ListingMatch {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  listingId Int
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  score     Int
+  verdict   String?
+  reasons   String[]
+  concerns  String[]
+  summary   String?
+  engine    String   @default("heuristic")
+  model     String?
+  prefsHash String
+  computedAt DateTime @default(now())
+
+  @@unique([userId, listingId])
+  @@index([userId, score])
 }

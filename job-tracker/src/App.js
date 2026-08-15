@@ -1,145 +1,156 @@
-import { useState, useEffect } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react';
+
 import './App.css';
-import { SignedIn, SignedOut, SignInButton, UserButton, useAuth } from '@clerk/clerk-react';
+import { useApi } from './api';
+import { ToastProvider } from './ui';
+import TrackerPage from './pages/TrackerPage';
+import FeedPage from './pages/FeedPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import PreferencesPage from './pages/PreferencesPage';
 
+/* ---- Shared app data ----------------------------------------------------- */
 
-function App() {
-  const [applications, setApplications] = useState([]);
-  const [company, setCompany] = useState('');
-  const [role, setRole] = useState('');
-  const { getToken, isLoaded, isSignedIn } = useAuth();
+const AppDataContext = createContext({ pendingUpdates: [], refreshPending: () => {} });
+
+export function useAppData() {
+  return useContext(AppDataContext);
+}
+
+function AppDataProvider({ children }) {
+  const api = useApi();
+  const [pendingUpdates, setPendingUpdates] = useState([]);
+
+  const refreshPending = useCallback(async () => {
+    try {
+      setPendingUpdates(await api.getPendingUpdates());
+    } catch {
+      // A failed badge refresh shouldn't interrupt whatever the user is doing.
+    }
+  }, [api]);
 
   useEffect(() => {
-    async function loadApplications() {
-        try {
-          const token = await getToken();
-          const response = await fetch(`${process.env.REACT_APP_API_URL}/applications`, {
-            headers: {'Authorization': `Bearer ${token}`},
-          });
-          if (!response.ok) {
-            throw new Error('Failed to load applications');
-          }
-          const data = await response.json();
-          setApplications(data);
-        } catch(error) {
-          console.error(error);
-          alert('Could not load applications. Please try again');
-        }
-      }
-    if (isLoaded && isSignedIn) {
-      loadApplications();
-    }
-  }, [isLoaded, isSignedIn, getToken]);
+    refreshPending();
+  }, [refreshPending]);
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-
-    const newApp = {
-      company: company,
-      role: role,
-    };
-    try{
-      const token = await getToken();
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/applications`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-        body: JSON.stringify(newApp),
-      });
-      if (!response.ok) throw new Error("Failed to post applications");
-      const savedApp = await response.json();
-      setApplications([...applications, savedApp]);
-      setCompany('');
-      setRole('');
-    } catch(error) {
-      console.error(error);
-      alert("Couldnt post applications");
-    }
-  }
-
-  async function handleDelete(idToRemove){
-    try {
-      const token = await getToken();
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/applications/${idToRemove}`, {
-        method: 'DELETE',
-        headers: {'Authorization': `Bearer ${token}`},
-      });
-      if (!response.ok) throw new Error("Could not delete application");
-      setApplications(applications.filter((app) => app.id !== idToRemove));
-    } catch(error){
-      console.error(error);
-      alert("Could not delete application :(");
-    }
-  }
-
-  async function handleStatusChange(idToChange, newStatus) {
-    try {
-      const token = await getToken();
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/applications/${idToChange}`, {
-        method: 'PATCH',
-        headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
-        body: JSON.stringify({newStatus: newStatus}),
-      });
-      if (!response.ok) throw new Error("Could not change status");
-      setApplications(applications.map((app) => {
-        if (idToChange === app.id){
-        return {...app, status: newStatus};
-        }
-        else{
-          return app;
-        }
-      }));
-    } catch(error) {
-      console.error(error);
-      alert("Could not update status");
-    }
-  }
-
-  
   return (
-    <div className="App">
-      <SignedOut>
-        <h1>Job Applications</h1>
-        <p>Sign in to track your applications</p>
-        <SignInButton />
-      </SignedOut>
+    <AppDataContext.Provider value={{ pendingUpdates, refreshPending }}>
+      {children}
+    </AppDataContext.Provider>
+  );
+}
 
-      <SignedIn>
-        <UserButton />
-        <h1>Job Applications: {applications.length}</h1>
-        <form onSubmit={handleSubmit} className="job-form">
-          <input
-            type="text"
-            placeholder="Company"
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-          />
-          <input
-            type="text"
-            placeholder="Role"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-          />
-          <button type="submit">Add</button>
-        </form>
-        <ul>
-          {applications.map((app) => (
-            <li key={app.id} className="job-item">
-            {app.role} at {app.company} - {app.status}
-            <button onClick={() => handleDelete(app.id)}>Delete</button>
-            <select 
-              value={app.status}
-              onChange={(e) => handleStatusChange(app.id, e.target.value)}>
-                <option value="Applied">Applied</option>
-                <option value="Interviewing">Interviewing</option>
-                <option value="Offered">Offered</option>
-                <option value="Rejected">Rejected</option>
-            </select>
-            </li>
-          ))}
-          </ul>
-        </SignedIn>
+/* ---- Chrome -------------------------------------------------------------- */
+
+function Nav() {
+  const { pendingUpdates } = useAppData();
+
+  return (
+    <nav className="nav">
+      <div className="nav-inner">
+        <NavLink to="/tracker" className="brand">
+          <span className="brand-mark">JT</span>
+          <span>Job Tracker</span>
+        </NavLink>
+
+        <div className="nav-links">
+          <NavLink to="/tracker" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            Tracker
+            {pendingUpdates.length > 0 && (
+              <span className="nav-count alert" title="Listings changed upstream">
+                {pendingUpdates.length}
+              </span>
+            )}
+          </NavLink>
+          <NavLink to="/feed" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+            Listings
+          </NavLink>
+          <NavLink
+            to="/analytics"
+            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+          >
+            Analytics
+          </NavLink>
+          <NavLink
+            to="/preferences"
+            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+          >
+            Preferences
+          </NavLink>
+        </div>
+
+        <div className="nav-right">
+          <UserButton afterSignOutUrl="/" />
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+function Landing() {
+  return (
+    <div className="landing">
+      <div className="landing-inner">
+        <h1>Stop scrolling job boards. Start shipping applications.</h1>
+        <p>
+          Job Tracker pulls thousands of internship and new-grad listings into one place, scores
+          them against what you actually want, and turns applying into a single click — then keeps
+          watching the posting after you apply.
+        </p>
+        <SignInButton mode="modal">
+          <button className="btn btn-primary" style={{ padding: '11px 22px', fontSize: 15 }}>
+            Sign in to get started
+          </button>
+        </SignInButton>
+
+        <div className="landing-features">
+          <div className="landing-feature">
+            <strong>One-click apply</strong>
+            <span>Company, role, link and location land in your tracker already filled in.</span>
+          </div>
+          <div className="landing-feature">
+            <strong>AI matching</strong>
+            <span>Every listing scored against your requirements, values and deal breakers.</span>
+          </div>
+          <div className="landing-feature">
+            <strong>Change detection</strong>
+            <span>If a posting you applied to gets edited, see the diff and decide.</span>
+          </div>
+          <div className="landing-feature">
+            <strong>Real analytics</strong>
+            <span>Response rates, funnel and momentum from your own application history.</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-export default App;
+/* ---- Root ---------------------------------------------------------------- */
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <SignedOut>
+        <Landing />
+      </SignedOut>
+
+      <SignedIn>
+        <AppDataProvider>
+          <div className="app-shell">
+            <Nav />
+            <Routes>
+              <Route path="/" element={<Navigate to="/tracker" replace />} />
+              <Route path="/tracker" element={<TrackerPage />} />
+              <Route path="/feed" element={<FeedPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/preferences" element={<PreferencesPage />} />
+              <Route path="*" element={<Navigate to="/tracker" replace />} />
+            </Routes>
+          </div>
+        </AppDataProvider>
+      </SignedIn>
+    </ToastProvider>
+  );
+}

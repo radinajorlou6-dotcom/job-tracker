@@ -7,4 +7,24 @@ function requireUser(req, res, next) {
   next();
 }
 
-module.exports = { requireUser };
+// Express 5 forwards rejected promises to the error handler on its own, but
+// wrapping keeps the intent explicit and works the same if handlers move.
+function asyncHandler(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function errorHandler(error, _req, res, _next) {
+  console.error('[error]', error);
+  if (res.headersSent) return;
+  const status = error.status || 500;
+  res.status(status).json({ error: error.expose ? error.message : 'Something went wrong on the server' });
+}
+
+function httpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  error.expose = true;
+  return error;
+}
+
+module.exports = { requireUser, asyncHandler, errorHandler, httpError };

@@ -1,13 +1,166 @@
+/* ---- Design tokens -------------------------------------------------------
+   Light is the base palette; the dark block only re-declares the tokens, so
+   every component stays theme-agnostic.                                     */
+
+:root {
+  --bg: #f6f7f9;
+  --bg-elevated: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f2f4f7;
+  --surface-3: #e9edf2;
+  --border: #dfe3ea;
+  --border-strong: #c8cfda;
+
+  --text: #10131a;
+  --text-muted: #5b6577;
+  --text-faint: #8b95a7;
+
+  --accent: #3b5bdb;
+  --accent-hover: #2f4bc4;
+  --accent-soft: #e8edfd;
+  --accent-text: #ffffff;
+
+  --success: #12805c;
+  --success-soft: #dcf5eb;
+  --warning: #9a6207;
+  --warning-soft: #fdf0d6;
+  --danger: #c0392f;
+  --danger-soft: #fbe4e2;
+  --info: #2b6cb0;
+  --info-soft: #e3eefb;
+  --neutral-soft: #eceff3;
+
+  --shadow-sm: 0 1px 2px rgba(16, 19, 26, 0.06);
+  --shadow-md: 0 4px 14px rgba(16, 19, 26, 0.08);
+  --shadow-lg: 0 18px 48px rgba(16, 19, 26, 0.16);
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --nav-height: 60px;
+  --max-width: 1240px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0e14;
+    --bg-elevated: #121722;
+    --surface: #141a25;
+    --surface-2: #1b2231;
+    --surface-3: #232c3d;
+    --border: #253044;
+    --border-strong: #364459;
+
+    --text: #e7ebf2;
+    --text-muted: #97a1b4;
+    --text-faint: #6b7689;
+
+    --accent: #5b8cff;
+    --accent-hover: #7aa2ff;
+    --accent-soft: #17233f;
+    --accent-text: #08101f;
+
+    --success: #3ddc97;
+    --success-soft: #0f2a22;
+    --warning: #f0b429;
+    --warning-soft: #2c2311;
+    --danger: #ff6b6b;
+    --danger-soft: #2e1618;
+    --info: #63b3ed;
+    --info-soft: #12243a;
+    --neutral-soft: #1e2635;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.6);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  font-weight: 650;
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
-    monospace;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
 }
