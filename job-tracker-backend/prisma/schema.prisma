@@ -11,9 +11,9 @@ model Listing {
   id     Int    @id @default(autoincrement())
   source String?
   category String?
-  companyName String?
+  company String?
   sourceId String @unique
-  title String?
+  role String?
   active Boolean?
   terms String[]
   dateUpdated DateTime?
@@ -28,11 +28,12 @@ model Listing {
 
 model Application {
   id      Int    @id @default(autoincrement())
-  company String
-  role    String
+  source  String?
+  company String?
+  sourceId String?
+  role    String?
   status  String @default("Applied")
   userId String
-  sourceId String?
   category String?
   terms String[]
   dateApplied DateTime? @default(now())
