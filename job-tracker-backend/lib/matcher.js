@@ -8,23 +8,31 @@ const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
 // each request small enough to stay well inside max_tokens.
 const BATCH_SIZE = 12;
 
-let cachedClient;
-let cachedClientKey;
+// Clients are cached per key, since a run makes many calls with the same one
+// and different users bring different keys.
+const clientCache = new Map();
+const MAX_CACHED_CLIENTS = 32;
 
-// Returns null when no API key is configured — callers fall back to the
+// Returns null when no key was supplied — callers fall back to the
 // deterministic scorer so the feature still works without Claude.
-function getClient() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+function getClient(apiKey) {
   if (!apiKey) return null;
-  if (cachedClient && cachedClientKey === apiKey) return cachedClient;
+  if (clientCache.has(apiKey)) return clientCache.get(apiKey);
+
   const Anthropic = require('@anthropic-ai/sdk');
-  cachedClient = new Anthropic({ apiKey });
-  cachedClientKey = apiKey;
-  return cachedClient;
+  const client = new Anthropic({ apiKey });
+
+  // Bound the cache so a long-lived process can't accumulate clients forever.
+  if (clientCache.size >= MAX_CACHED_CLIENTS) {
+    clientCache.delete(clientCache.keys().next().value);
+  }
+  clientCache.set(apiKey, client);
+  return client;
 }
 
-function aiAvailable() {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
+function clearClientCache(apiKey) {
+  if (apiKey) clientCache.delete(apiKey);
+  else clientCache.clear();
 }
 
 const PREF_FIELDS = [
@@ -42,15 +50,19 @@ const PREF_FIELDS = [
   'values',
 ];
 
-// Identifies a preference set. When this changes, existing scores are stale and
-// the UI can offer a re-run without us deleting anything.
-function prefsHash(prefs) {
+/**
+ * Identifies a preference set *and* the engine that scored it. When either
+ * changes, existing scores are stale and the UI can offer a re-run without us
+ * deleting anything — so adding your own API key correctly invalidates scores
+ * produced by the heuristic scorer.
+ */
+function prefsHash(prefs, { ai = false } = {}) {
   const canonical = {};
   for (const field of PREF_FIELDS) {
     const value = prefs?.[field];
     canonical[field] = Array.isArray(value) ? [...value].sort() : (value ?? null);
   }
-  canonical.engine = aiAvailable() ? `claude:${MODEL}` : 'heuristic';
+  canonical.engine = ai ? `claude:${MODEL}` : 'heuristic';
   return crypto.createHash('sha256').update(JSON.stringify(canonical)).digest('hex').slice(0, 32);
 }
 
@@ -382,8 +394,8 @@ async function scoreBatchWithClaude(client, prefs, listings) {
  * deterministic scorer otherwise. Never throws: a failed batch degrades to
  * heuristic scores and surfaces the reason through `onProgress`.
  */
-async function scoreListings(listings, prefs, { onProgress } = {}) {
-  const client = getClient();
+async function scoreListings(listings, prefs, { onProgress, apiKey } = {}) {
+  const client = getClient(apiKey);
   const results = [];
   let degraded = null;
 
@@ -416,9 +428,9 @@ async function scoreListings(listings, prefs, { onProgress } = {}) {
 module.exports = {
   MODEL,
   BATCH_SIZE,
-  aiAvailable,
   prefsHash,
   heuristicScore,
   scoreListings,
   verdictFor,
+  clearClientCache,
 };

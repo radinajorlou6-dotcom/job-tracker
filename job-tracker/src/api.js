@@ -91,6 +91,11 @@ export function useApi() {
       savePreferences: (body) => request('/preferences', { method: 'PUT', body }),
       getMatchStatus: () => request('/match/status'),
       runMatching: (body) => request('/match/run', { method: 'POST', body: body ?? {} }),
+
+      // The plaintext key is only ever sent on save; nothing reads it back.
+      getApiKeyStatus: () => request('/settings/api-key'),
+      saveApiKey: (apiKey) => request('/settings/api-key', { method: 'PUT', body: { apiKey } }),
+      deleteApiKey: () => request('/settings/api-key', { method: 'DELETE' }),
     };
   }, [getToken]);
 }

@@ -3,7 +3,8 @@ const { getAuth } = require('@clerk/express');
 const prisma = require('../prisma');
 const { requireUser, asyncHandler, httpError } = require('../middleware');
 const { getPreferences } = require('./preferences');
-const { prefsHash, aiAvailable, scoreListings, MODEL } = require('../lib/matcher');
+const { prefsHash, scoreListings, MODEL } = require('../lib/matcher');
+const { resolveApiKey, getStatus } = require('../lib/credentials');
 
 const router = express.Router();
 
@@ -26,7 +27,9 @@ async function coverage(userId, hash) {
 
 async function runMatching(userId, { limit, rescoreAll }) {
   const preferences = await getPreferences(userId);
-  const hash = prefsHash(preferences);
+  // Resolved per run, so a key added mid-session takes effect immediately.
+  const { key: apiKey } = await resolveApiKey(userId);
+  const hash = prefsHash(preferences, { ai: Boolean(apiKey) });
 
   const where = { active: true, isVisible: true };
   if (!rescoreAll) {
@@ -50,6 +53,7 @@ async function runMatching(userId, { limit, rescoreAll }) {
   }
 
   const { results, degraded } = await scoreListings(listings, preferences, {
+    apiKey,
     onProgress: ({ done }) => {
       job.done = done;
     },
@@ -95,12 +99,19 @@ router.get(
   requireUser,
   asyncHandler(async (req, res) => {
     const userId = getAuth(req).userId;
-    const preferences = await getPreferences(userId);
-    const hash = prefsHash(preferences);
+    const [preferences, credentials] = await Promise.all([
+      getPreferences(userId),
+      getStatus(userId),
+    ]);
+    const hash = prefsHash(preferences, { ai: credentials.aiEnabled });
 
     res.json({
       job: jobState(userId),
-      engine: { ai: aiAvailable(), model: aiAvailable() ? MODEL : 'heuristic' },
+      engine: {
+        ai: credentials.aiEnabled,
+        source: credentials.source,
+        model: credentials.aiEnabled ? MODEL : 'heuristic',
+      },
       coverage: await coverage(userId, hash),
     });
   }),
@@ -118,6 +129,7 @@ router.post(
 
     const limit = Math.min(400, Math.max(1, Number(req.body?.limit) || 100));
     const rescoreAll = Boolean(req.body?.rescoreAll);
+    const credentials = await getStatus(userId);
 
     const job = {
       status: 'running',
@@ -126,7 +138,7 @@ router.post(
       scored: 0,
       degraded: null,
       error: null,
-      engine: aiAvailable() ? `claude (${MODEL})` : 'heuristic',
+      engine: credentials.aiEnabled ? `claude (${MODEL})` : 'heuristic',
       startedAt: new Date().toISOString(),
       finishedAt: null,
     };

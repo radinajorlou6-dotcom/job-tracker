@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi } from '../api';
-import { ChipSelect, Field, Skeleton, Spinner, TagInput, useToast } from '../ui';
+import {
+  ChipSelect,
+  Field,
+  Skeleton,
+  Spinner,
+  TagInput,
+  formatRelative,
+  useToast,
+} from '../ui';
 
 const REMOTE_OPTIONS = [
   { value: 'any', label: 'No preference' },
@@ -32,9 +40,168 @@ const LOCATION_SUGGESTIONS = [
   'Chicago, IL',
 ];
 
+/* ---- API key ------------------------------------------------------------- */
+
+function ApiKeyPanel({ onChange }) {
+  const api = useApi();
+  const toast = useToast();
+  const [status, setStatus] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      setStatus(await api.getApiKeyStatus());
+    } catch (error) {
+      toast.error(error.message);
+    }
+  }, [api, toast]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function save(event) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      const next = await api.saveApiKey(draft);
+      setStatus(next);
+      setDraft('');
+      setEditing(false);
+      toast.success('Key verified and saved — scoring now runs on Claude');
+      onChange?.();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!window.confirm('Remove your API key? Scoring falls back to the built-in scorer.')) return;
+    setBusy(true);
+    try {
+      setStatus(await api.deleteApiKey());
+      toast.notify('Key removed');
+      onChange?.();
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!status) return null;
+
+  return (
+    <div className="panel">
+      <div className="panel-title">Your Claude API key</div>
+      <p className="panel-sub">
+        Scoring runs on your own Anthropic account, so you control the spend. The key is encrypted
+        before it is stored and is never sent back to the browser.
+      </p>
+
+      {!status.storageReady && (
+        <div className="banner alert" style={{ marginBottom: 16 }}>
+          <span>⚠️</span>
+          <div className="grow">
+            <strong>This server cannot store keys yet.</strong>
+            <div className="small" style={{ marginTop: 2 }}>
+              <code>CREDENTIAL_SECRET</code> is not set on the backend, so there is nothing to
+              encrypt with. Scoring will use the built-in scorer until it is configured.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {status.hasOwnKey && !editing ? (
+        <div className="stack" style={{ gap: 14 }}>
+          <div className="row-between">
+            <div>
+              <div className="row" style={{ gap: 8 }}>
+                <span className="badge badge-success">✓ active</span>
+                <code>{status.preview}</code>
+              </div>
+              {status.lastValidatedAt && (
+                <div className="small faint" style={{ marginTop: 4 }}>
+                  Verified {formatRelative(status.lastValidatedAt)} · scoring on {status.model}
+                </div>
+              )}
+            </div>
+            <div className="row" style={{ gap: 8 }}>
+              <button className="btn btn-sm" onClick={() => setEditing(true)} disabled={busy}>
+                Replace
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={remove} disabled={busy}>
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={save} className="stack" style={{ gap: 12 }}>
+          {!status.hasOwnKey && status.serverKeyAvailable && (
+            <div className="banner info" style={{ marginBottom: 0 }}>
+              <span>ℹ️</span>
+              <div className="grow">
+                This server has a shared key, so scoring already works. Add your own to bill it to
+                your account instead.
+              </div>
+            </div>
+          )}
+
+          <Field
+            label="Anthropic API key"
+            hint="Starts with sk-ant-. Create one at platform.claude.com under API keys."
+          >
+            <input
+              className="input"
+              type="password"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              placeholder="sk-ant-..."
+              autoComplete="off"
+              spellCheck="false"
+              disabled={!status.storageReady || busy}
+            />
+          </Field>
+
+          <div className="row" style={{ gap: 10 }}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={!draft.trim() || busy || !status.storageReady}
+            >
+              {busy && <Spinner />} Verify and save
+            </button>
+            {editing && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setEditing(false);
+                  setDraft('');
+                }}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          <p className="small faint">
+            We check the key against Anthropic before saving it — no tokens are spent doing so.
+          </p>
+        </form>
+      )}
+    </div>
+  );
+}
+
 /* ---- Match runner -------------------------------------------------------- */
 
-function MatchRunner({ dirty }) {
+function MatchRunner({ dirty, refreshToken }) {
   const api = useApi();
   const toast = useToast();
   const [status, setStatus] = useState(null);
@@ -51,10 +218,12 @@ function MatchRunner({ dirty }) {
     }
   }, [api]);
 
+  // refreshToken changes when the API key is added or removed, so the engine
+  // line and coverage numbers update without a page reload.
   useEffect(() => {
     refresh();
     return () => clearInterval(pollRef.current);
-  }, [refresh]);
+  }, [refresh, refreshToken]);
 
   const running = status?.job?.status === 'running';
 
@@ -104,8 +273,10 @@ function MatchRunner({ dirty }) {
       <div className="panel-title">Match your listings</div>
       <p className="panel-sub">
         {status?.engine?.ai
-          ? `Scoring runs on Claude (${status.engine.model}), with a deterministic scorer as backup if a batch fails.`
-          : 'No ANTHROPIC_API_KEY is set, so scoring uses the built-in deterministic scorer. Add a key to the backend .env to switch on Claude.'}
+          ? `Scoring runs on Claude (${status.engine.model}) using ${
+              status.engine.source === 'user' ? 'your API key' : "this server's shared key"
+            }, with a deterministic scorer as backup if a batch fails.`
+          : 'Scoring uses the built-in deterministic scorer. Add your Anthropic API key above to switch on Claude.'}
       </p>
 
       {coverage && (
@@ -203,6 +374,7 @@ export default function PreferencesPage() {
   const [facets, setFacets] = useState({ categories: [], terms: [], degrees: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [engineToken, setEngineToken] = useState(0);
 
   useEffect(() => {
     Promise.all([api.getPreferences(), api.getFacets()])
@@ -266,7 +438,8 @@ export default function PreferencesPage() {
       </div>
 
       <div className="stack" style={{ gap: 16 }}>
-        <MatchRunner dirty={dirty} />
+        <ApiKeyPanel onChange={() => setEngineToken((n) => n + 1)} />
+        <MatchRunner dirty={dirty} refreshToken={engineToken} />
 
         <div className="panel">
           <div className="panel-title">About you</div>

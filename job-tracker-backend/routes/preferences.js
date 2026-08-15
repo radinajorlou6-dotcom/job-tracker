@@ -2,7 +2,8 @@ const express = require('express');
 const { getAuth } = require('@clerk/express');
 const prisma = require('../prisma');
 const { requireUser, asyncHandler } = require('../middleware');
-const { prefsHash, aiAvailable, MODEL } = require('../lib/matcher');
+const { prefsHash, MODEL } = require('../lib/matcher');
+const { getStatus } = require('../lib/credentials');
 
 const router = express.Router();
 
@@ -71,13 +72,17 @@ router.get(
   requireUser,
   asyncHandler(async (req, res) => {
     const userId = getAuth(req).userId;
-    const record = await prisma.userPreferences.findUnique({ where: { userId } });
+    const [record, credentials] = await Promise.all([
+      prisma.userPreferences.findUnique({ where: { userId } }),
+      getStatus(userId),
+    ]);
     res.json({
       preferences: shape(record),
       engine: {
-        ai: aiAvailable(),
-        model: aiAvailable() ? MODEL : null,
-        prefsHash: prefsHash(record ?? DEFAULT_PREFERENCES),
+        ai: credentials.aiEnabled,
+        source: credentials.source,
+        model: credentials.aiEnabled ? MODEL : null,
+        prefsHash: prefsHash(record ?? DEFAULT_PREFERENCES, { ai: credentials.aiEnabled }),
       },
     });
   }),
@@ -113,7 +118,8 @@ router.put(
       create: { userId, ...data },
     });
 
-    const hash = prefsHash(record);
+    const credentials = await getStatus(userId);
+    const hash = prefsHash(record, { ai: credentials.aiEnabled });
     // Anything scored under a different preference set is now stale. We report
     // it rather than deleting, so the feed keeps working until a re-run.
     const staleMatches = await prisma.listingMatch.count({
@@ -122,7 +128,12 @@ router.put(
 
     res.json({
       preferences: shape(record),
-      engine: { ai: aiAvailable(), model: aiAvailable() ? MODEL : null, prefsHash: hash },
+      engine: {
+        ai: credentials.aiEnabled,
+        source: credentials.source,
+        model: credentials.aiEnabled ? MODEL : null,
+        prefsHash: hash,
+      },
       staleMatches,
     });
   }),

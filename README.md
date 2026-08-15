@@ -36,11 +36,21 @@ npm start
 |---|---|---|
 | `DATABASE_URL` | yes | Postgres connection string |
 | `CLERK_SECRET_KEY` | yes | Verifies the bearer token on every request |
-| `ANTHROPIC_API_KEY` | no | Switches matching from the built-in scorer to Claude |
+| `CREDENTIAL_SECRET` | for BYO keys | Encrypts user-supplied API keys at rest. ≥32 chars |
+| `ANTHROPIC_API_KEY` | no | Shared fallback key. Omit to require every user to bring their own |
 | `ANTHROPIC_MODEL` | no | Defaults to `claude-opus-5` |
 | `ANTHROPIC_EFFORT` | no | `low` (default), `medium`, `high`, `xhigh`, `max` |
 | `LISTING_REFRESH_HOURS` | no | Feed refresh interval, default 6 |
 | `DISABLE_AUTO_IMPORT` | no | Set `true` to skip the scheduled feed refresh |
+
+Generate `CREDENTIAL_SECRET` once, then keep it stable:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Rotating it does not lose data — it only makes already-stored keys undecryptable,
+and affected users simply re-enter theirs.
 
 `job-tracker/.env`
 
@@ -62,11 +72,26 @@ tracker renders them identically.
 
 `lib/matcher.js` scores listings against your saved preferences.
 
-- With `ANTHROPIC_API_KEY` set, batches of 12 listings go to Claude with a JSON
-  schema (`output_config.format`), returning a score, verdict, reasons,
-  concerns, and a one-line summary per listing.
+- With a key available, batches of 12 listings go to Claude with a JSON schema
+  (`output_config.format`), returning a score, verdict, reasons, concerns, and a
+  one-line summary per listing.
 - Without a key — or if a batch errors or is refused — a deterministic scorer
   produces the same shape, so a run always returns a complete result set.
+
+**Each user brings their own API key**, entered under Preferences → Your Claude
+API key, so scoring bills to their own Anthropic account. Key resolution per run
+is: the user's own key → the server-wide `ANTHROPIC_API_KEY` if one is set →
+the deterministic scorer.
+
+Keys are encrypted with AES-256-GCM (random IV per write, auth tag verified on
+read) under `CREDENTIAL_SECRET` before being stored, and no endpoint ever
+returns the plaintext — the UI only sees a masked preview like `sk-ant-api…4f2a`.
+A key is checked against Anthropic before it is saved, using `models.list`, so
+verification costs no tokens. If `CREDENTIAL_SECRET` is missing the app refuses
+to store keys rather than falling back to plaintext.
+
+The engine is part of `prefsHash`, so adding a key correctly marks
+heuristic-scored listings as stale and prompts a re-run.
 
 Runs happen in the background (`POST /match/run`) because scoring a few hundred
 listings takes longer than one HTTP request should; the client polls
@@ -121,13 +146,16 @@ Listings tab.
 
 ```bash
 cd job-tracker-backend
-node scripts/verify.js
+node scripts/verify.js              # core app behaviour
+node scripts/verify-credentials.js  # API key encryption and isolation
 ```
 
-Exercises preferences, scoring, one-click apply, the full change-detection
-lifecycle (snapshot → upstream edit → diff → dismiss → accept), and the event
-history, against the live database with a scratch user that is removed
-afterwards.
+The first exercises preferences, scoring, one-click apply, the full
+change-detection lifecycle (snapshot → upstream edit → diff → dismiss → accept),
+and the event history. The second covers the encryption round-trip, tamper
+rejection, that no plaintext reaches the database, that two users never resolve
+each other's keys, and the user → server → heuristic fallback order. Both use a
+scratch user that is removed afterwards.
 
 ## API
 
@@ -150,6 +178,9 @@ afterwards.
 | `GET`/`PUT` | `/preferences` | Read / save matching preferences |
 | `POST` | `/match/run` | Start a background scoring run |
 | `GET` | `/match/status` | Run progress and score coverage |
+| `GET` | `/settings/api-key` | Key status — masked preview only, never the key |
+| `PUT` | `/settings/api-key` | Verify against Anthropic, then encrypt and store |
+| `DELETE` | `/settings/api-key` | Remove the stored key |
 
 Every route except `/health`, `/listings/facets`, and `/listings/feeds` requires
 a Clerk bearer token and is scoped to the signed-in user.
